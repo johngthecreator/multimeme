@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import Toolbar from "../components/Toolbar/Toolbar";
 import Canvas from "../components/Canvas/Canvas";
+import Settings from "../components/Settings/Settings";
 import type { CanvasElementData } from "../components/Canvas/CanvasElement";
 import { useDexieElements } from "../hooks/useDexieElements";
 import { db } from "../db";
@@ -41,6 +42,7 @@ export default function Home() {
   });
   const [history, setHistory] = useState<CanvasElementData[][]>([[]]);
   const [historyIndex, setHistoryIndex] = useState(0);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [cursorPosition, setCursorPosition] = useState({ x: 50, y: 50 });
@@ -79,26 +81,43 @@ export default function Home() {
 
   const { saveElements } = useDexieElements(elements, handleLoadElements);
 
-  // Cleanup removed images
-  const cleanupRemovedImages = useCallback(
-    async (removedElements: CanvasElementData[]) => {
-      for (const el of removedElements) {
+  // Cleanup unreferenced images (images in Dexie not referenced by any history entry)
+  const handleCleanupUnreferencedImages = useCallback(async () => {
+    // Collect all image IDs referenced across every history entry
+    const referencedIds = new Set<string>();
+    for (const entry of history) {
+      for (const el of entry) {
         if (el.type === "image") {
-          // Revoke object URL
-          if (el.src?.startsWith("blob:")) {
-            URL.revokeObjectURL(el.src);
-          }
-          // Delete blob from database
-          try {
-            await db.imageBlobs.delete(el.id);
-          } catch (error) {
-            console.error("Failed to delete image blob:", error);
-          }
+          referencedIds.add(el.id);
         }
       }
-    },
-    [],
-  );
+    }
+
+    // Get all stored blobs
+    const storedBlobs = await db.imageBlobs.toArray();
+    let cleanedCount = 0;
+
+    for (const blob of storedBlobs) {
+      if (!referencedIds.has(blob.id)) {
+        // Revoke any object URL that might exist for this blob
+        // (find it from current elements or history entries)
+        for (const entry of history) {
+          const el = entry.find((e) => e.id === blob.id);
+          if (el?.src?.startsWith("blob:")) {
+            URL.revokeObjectURL(el.src);
+          }
+        }
+        try {
+          await db.imageBlobs.delete(blob.id);
+          cleanedCount++;
+        } catch (error) {
+          console.error("Failed to delete image blob:", error);
+        }
+      }
+    }
+
+    return cleanedCount;
+  }, [history]);
 
   // Add a new textbox
   const handleAddTextbox = () => {
@@ -130,14 +149,13 @@ export default function Home() {
   };
 
   // Clear all elements
-  const handleClearAll = async () => {
+  const handleClearAll = () => {
     if (elements.length === 0) {
       updateStatus("Canvas is already empty", "info");
       return;
     }
 
     if (window.confirm("Are you sure you want to clear all elements?")) {
-      await cleanupRemovedImages(elements);
       updateElementsWithHistory([]);
       setSelectedElementId(undefined);
       updateStatus("Canvas cleared", "success");
@@ -158,12 +176,11 @@ export default function Home() {
   };
 
   // Handle element blur - delete empty textboxes
-  const handleElementBlur = async (id: string) => {
+  const handleElementBlur = (id: string) => {
     const element = elements.find((el) => el.id === id);
 
     // Delete if empty textbox
     if (element && element.type === "textbox" && !element.content?.trim()) {
-      await cleanupRemovedImages([element]);
       const newElements = elements.filter((el) => el.id !== id);
       updateElementsWithHistory(newElements);
       updateStatus("Empty textbox deleted", "info");
@@ -300,16 +317,14 @@ export default function Home() {
   };
 
   // Handle delete key
-  const handleKeyDown = async (e: KeyboardEvent) => {
+  const handleKeyDown = (e: KeyboardEvent) => {
     // Delete selected element
-    if (e.key === "Delete" && selectedElementId) {
+    if ((e.key === "Delete" || e.key === "Backspace") && selectedElementId) {
+      // Don't delete if user is editing text in a contentEditable
+      const activeEl = document.activeElement;
+      if (activeEl && (activeEl as HTMLElement).isContentEditable) return;
+
       e.preventDefault();
-      const elementToDelete = elements.find(
-        (el) => el.id === selectedElementId,
-      );
-      if (elementToDelete) {
-        await cleanupRemovedImages([elementToDelete]);
-      }
       const newElements = elements.filter((el) => el.id !== selectedElementId);
       updateElementsWithHistory(newElements);
       setSelectedElementId(undefined);
@@ -343,13 +358,7 @@ export default function Home() {
   useEffect(() => {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [
-    selectedElementId,
-    elements,
-    historyIndex,
-    history,
-    cleanupRemovedImages,
-  ]);
+  }, [selectedElementId, elements, historyIndex, history]);
 
   // Setup paste event listener
   useEffect(() => {
@@ -782,7 +791,15 @@ export default function Home() {
         onRedo={handleRedo}
         canUndo={historyIndex > 0}
         canRedo={historyIndex < history.length - 1}
+        onOpenSettings={() => setSettingsOpen(true)}
       />
+
+      {settingsOpen && (
+        <Settings
+          onClose={() => setSettingsOpen(false)}
+          onCleanupImages={handleCleanupUnreferencedImages}
+        />
+      )}
 
       <Canvas
         ref={canvasRef}

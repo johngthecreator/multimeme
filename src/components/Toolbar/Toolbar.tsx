@@ -1,3 +1,4 @@
+import { Settings as SettingsIcon } from "lucide-react";
 import AddTextboxButton from "./AddTextboxButton";
 import ClearButton from "./ClearButton";
 import UndoRedoButtons from "./UndoRedoButtons";
@@ -9,8 +10,7 @@ interface ToolbarProps {
   onRedo: () => void;
   canUndo?: boolean;
   canRedo?: boolean;
-  status?: string;
-  statusType?: "info" | "success" | "error" | "warning";
+  onOpenSettings: () => void;
 }
 
 export default function Toolbar({
@@ -20,6 +20,7 @@ export default function Toolbar({
   onRedo,
   canUndo = false,
   canRedo = false,
+  onOpenSettings,
 }: ToolbarProps) {
   return (
     <header
@@ -41,6 +42,15 @@ export default function Toolbar({
           canUndo={canUndo}
           canRedo={canRedo}
         />
+        <div className="h-6 w-px bg-gray-300"></div>
+        <button
+          onClick={onOpenSettings}
+          className="p-2 bg-gray-300 text-white rounded-xl hover:bg-gray-400 transition-colors"
+          title="Settings"
+          aria-label="Settings"
+        >
+          <SettingsIcon />
+        </button>
       </nav>
     </header>
   );
