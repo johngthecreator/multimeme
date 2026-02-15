@@ -1,6 +1,6 @@
-import { forwardRef } from 'react';
-import type { CanvasElementData } from './CanvasElement';
-import CanvasElement from './CanvasElement';
+import { forwardRef } from "react";
+import type { CanvasElementData } from "./CanvasElement";
+import CanvasElement from "./CanvasElement";
 
 interface CanvasProps {
   elements: CanvasElementData[];
@@ -10,27 +10,34 @@ interface CanvasProps {
   onElementBlur: (id: string) => void;
   onElementSelect: (id: string) => void;
   onCanvasClick?: () => void;
-  onElementMouseDown?: (elementId: string) => (e: React.MouseEvent<HTMLDivElement>) => void;
-  onRotateHandleMouseDown?: (elementId: string) => (e: React.MouseEvent<HTMLDivElement>) => void;
+  onElementMouseDown?: (
+    elementId: string,
+  ) => (e: React.MouseEvent<HTMLDivElement>) => void;
+  onRotateHandleMouseDown?: (
+    elementId: string,
+  ) => (e: React.MouseEvent<HTMLDivElement>) => void;
   onRotate?: (elementId: string, deltaRotation: number) => void;
   onMeasure?: (elementId: string, width: number, height: number) => void;
   isDragging?: boolean;
 }
 
-const Canvas = forwardRef<HTMLDivElement, CanvasProps>(function Canvas({
-  elements,
-  selectedElementId,
-  onElementContentChange,
-  onElementFocus,
-  onElementBlur,
-  onElementSelect,
-  onCanvasClick,
-  onElementMouseDown,
-  onRotateHandleMouseDown,
-  onRotate,
-  onMeasure,
-  isDragging = false,
-}, ref) {
+const Canvas = forwardRef<HTMLDivElement, CanvasProps>(function Canvas(
+  {
+    elements,
+    selectedElementId,
+    onElementContentChange,
+    onElementFocus,
+    onElementBlur,
+    onElementSelect,
+    onCanvasClick,
+    onElementMouseDown,
+    onRotateHandleMouseDown,
+    onRotate,
+    onMeasure,
+    isDragging = false,
+  },
+  ref,
+) {
   const handleCanvasClick = () => {
     // Clicks on elements are stopped via stopPropagation,
     // so if we reach here it's a canvas background click
@@ -41,7 +48,7 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(function Canvas({
     <div
       ref={ref}
       className={`w-screen h-screen relative bg-white overflow-auto cursor-default transition-opacity select-none ${
-        isDragging ? 'opacity-90' : ''
+        isDragging ? "opacity-90" : ""
       }`}
       onClick={handleCanvasClick}
       data-testid="canvas"
@@ -52,7 +59,7 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(function Canvas({
       <div className="absolute inset-0 opacity-5 pointer-events-none" />
 
       {/* Render all canvas elements - infinite canvas size */}
-      <div className="relative" style={{ width: '10000px', height: '10000px' }}>
+      <div className="relative" style={{ width: "10000px", height: "10000px" }}>
         {elements.map((element) => (
           <CanvasElement
             key={element.id}
@@ -71,9 +78,16 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(function Canvas({
         ))}
       </div>
 
-      {/* Empty state message */}
+      {/* Empty state message - positioned at center of canvas */}
       {elements.length === 0 && (
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <div
+          className="absolute w-1/2 flex items-center justify-center pointer-events-none"
+          style={{
+            left: "5000px",
+            top: "5000px",
+            transform: "translate(-50%, -50%)",
+          }}
+        >
           <div className="text-center text-gray-400">
             <p className="text-lg font-semibold">Canvas is empty</p>
             <p className="text-sm">Click "Add Textbox" to get started</p>
