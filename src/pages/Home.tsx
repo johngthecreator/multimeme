@@ -1,0 +1,600 @@
+import { useState, useRef, useEffect, useCallback } from "react";
+import Toolbar from "../components/Toolbar/Toolbar";
+import Canvas from "../components/Canvas/Canvas";
+import type { CanvasElementData } from "../components/Canvas/CanvasElement";
+import { useDexieElements } from "../hooks/useDexieElements";
+import { db } from "../db";
+
+interface StatusState {
+  message: string;
+  type: "info" | "success" | "error" | "warning";
+}
+
+interface DragState {
+  elementId: string | null;
+  startX: number;
+  startY: number;
+  elementStartX: number;
+  elementStartY: number;
+}
+
+interface RotateState {
+  elementId: string;
+  centerX: number;
+  centerY: number;
+  startAngle: number;
+  elementStartRotation: number;
+}
+
+export default function Home() {
+  const [elements, setElements] = useState<CanvasElementData[]>([]);
+  const [selectedElementId, setSelectedElementId] = useState<
+    string | undefined
+  >();
+  const [statusState, setStatusState] = useState<StatusState>({
+    message: "Ready",
+    type: "info",
+  });
+  const [history, setHistory] = useState<CanvasElementData[][]>([[]]);
+  const [historyIndex, setHistoryIndex] = useState(0);
+  const [dragState, setDragState] = useState<DragState | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [cursorPosition, setCursorPosition] = useState({ x: 50, y: 50 });
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const dragPositionRef = useRef<{
+    elementId: string;
+    x: number;
+    y: number;
+  } | null>(null);
+  const draggedElementRef = useRef<HTMLElement | null>(null);
+  const rotateStateRef = useRef<RotateState | null>(null);
+  const pendingRotationRef = useRef<number | null>(null);
+
+  // Update status
+  const updateStatus = (
+    message: string,
+    type: "info" | "success" | "error" | "warning" = "info",
+  ) => {
+    setStatusState({ message, type });
+  };
+
+  // Load elements from Dexie on mount
+  const handleLoadElements = useCallback(
+    (loadedElements: CanvasElementData[]) => {
+      setElements(loadedElements);
+      setHistory([loadedElements]);
+      setHistoryIndex(0);
+    },
+    [],
+  );
+
+  const { saveElements } = useDexieElements(elements, handleLoadElements);
+
+  // Cleanup removed images
+  const cleanupRemovedImages = useCallback(
+    async (removedElements: CanvasElementData[]) => {
+      for (const el of removedElements) {
+        if (el.type === "image") {
+          // Revoke object URL
+          if (el.src?.startsWith("blob:")) {
+            URL.revokeObjectURL(el.src);
+          }
+          // Delete blob from database
+          try {
+            await db.imageBlobs.delete(el.id);
+          } catch (error) {
+            console.error("Failed to delete image blob:", error);
+          }
+        }
+      }
+    },
+    [],
+  );
+
+  // Add a new textbox
+  const handleAddTextbox = () => {
+    const newId = `textbox-${Date.now()}`;
+    const newElement: CanvasElementData = {
+      id: newId,
+      type: "textbox",
+      x: 50 + elements.length * 10,
+      y: 50 + elements.length * 10,
+      content: "Edit this text",
+      rotation: 0,
+      fontSize: 16,
+    };
+
+    const newElements = [...elements, newElement];
+    updateElementsWithHistory(newElements);
+    setSelectedElementId(newId);
+    updateStatus("Textbox added", "success");
+  };
+
+  // Clear all elements
+  const handleClearAll = async () => {
+    if (elements.length === 0) {
+      updateStatus("Canvas is already empty", "info");
+      return;
+    }
+
+    if (window.confirm("Are you sure you want to clear all elements?")) {
+      await cleanupRemovedImages(elements);
+      updateElementsWithHistory([]);
+      setSelectedElementId(undefined);
+      updateStatus("Canvas cleared", "success");
+    }
+  };
+
+  // Handle element content change
+  const handleElementContentChange = (id: string, content: string) => {
+    const newElements = elements.map((el) =>
+      el.id === id ? { ...el, content } : el,
+    );
+    setElements(newElements);
+  };
+
+  // Handle element focus
+  const handleElementFocus = (id: string) => {
+    setSelectedElementId(id);
+  };
+
+  // Handle element blur - delete empty textboxes
+  const handleElementBlur = async (id: string) => {
+    const element = elements.find((el) => el.id === id);
+
+    // Delete if empty textbox
+    if (element && element.type === "textbox" && !element.content?.trim()) {
+      await cleanupRemovedImages([element]);
+      const newElements = elements.filter((el) => el.id !== id);
+      updateElementsWithHistory(newElements);
+      updateStatus("Empty textbox deleted", "info");
+
+      if (selectedElementId === id) {
+        setSelectedElementId(undefined);
+      }
+    }
+  };
+
+  // Handle element selection (for images and canvas clicks)
+  const handleElementSelect = (id: string) => {
+    setSelectedElementId(id);
+  };
+
+  // Handle canvas click to deselect
+  const handleCanvasClick = () => {
+    setSelectedElementId(undefined);
+  };
+
+  // Handle paste event for images
+  const handlePaste = (e: ClipboardEvent) => {
+    const clipboardItems = e.clipboardData?.items || [];
+
+    for (let i = 0; i < clipboardItems.length; i++) {
+      const item = clipboardItems[i];
+
+      if (item.type.indexOf("image") !== -1) {
+        e.preventDefault();
+        handlePasteImage(item);
+        break;
+      }
+    }
+  };
+
+  // Handle pasting image from clipboard
+  const handlePasteImage = async (item: DataTransferItem) => {
+    updateStatus("Processing image...", "info");
+
+    try {
+      const file = item.getAsFile();
+      if (!file) throw new Error("Could not extract file");
+
+      const newId = `image-${Date.now()}`;
+
+      // Store blob in Dexie
+      await db.imageBlobs.put({
+        id: newId,
+        blob: file,
+        storedAt: Date.now(),
+      });
+
+      // Create object URL for rendering (lightweight!)
+      const objectUrl = URL.createObjectURL(file);
+
+      // Create image element to get dimensions
+      const img = new Image();
+      img.onload = () => {
+        const newElement: CanvasElementData = {
+          id: newId,
+          type: "image",
+          x: cursorPosition.x,
+          y: cursorPosition.y,
+          width: Math.min(img.naturalWidth, 400),
+          height: Math.min(img.naturalHeight, 300),
+          rotation: 0,
+          src: objectUrl, // Use object URL instead of data URL
+        };
+
+        const newElements = [...elements, newElement];
+        updateElementsWithHistory(newElements);
+        setSelectedElementId(newElement.id);
+        updateStatus("Image pasted successfully", "success");
+      };
+      img.src = objectUrl;
+    } catch (err) {
+      updateStatus("Failed to paste image", "error");
+    }
+  };
+
+  // Update elements and manage history
+  const updateElementsWithHistory = (newElements: CanvasElementData[]) => {
+    // Remove future history if we're not at the end
+    const newHistory = history.slice(0, historyIndex + 1);
+    newHistory.push(newElements);
+    setHistory(newHistory);
+    setHistoryIndex(newHistory.length - 1);
+    setElements(newElements);
+  };
+
+  // Undo
+  const handleUndo = () => {
+    if (historyIndex > 0) {
+      const newIndex = historyIndex - 1;
+      setHistoryIndex(newIndex);
+      setElements(history[newIndex]);
+      setSelectedElementId(undefined);
+      updateStatus("Undone", "info");
+    }
+  };
+
+  // Redo
+  const handleRedo = () => {
+    if (historyIndex < history.length - 1) {
+      const newIndex = historyIndex + 1;
+      setHistoryIndex(newIndex);
+      setElements(history[newIndex]);
+      setSelectedElementId(undefined);
+      updateStatus("Redone", "info");
+    }
+  };
+
+  // Handle delete key
+  const handleKeyDown = async (e: KeyboardEvent) => {
+    // Delete selected element
+    if (e.key === "Delete" && selectedElementId) {
+      e.preventDefault();
+      const elementToDelete = elements.find(
+        (el) => el.id === selectedElementId,
+      );
+      if (elementToDelete) {
+        await cleanupRemovedImages([elementToDelete]);
+      }
+      const newElements = elements.filter((el) => el.id !== selectedElementId);
+      updateElementsWithHistory(newElements);
+      setSelectedElementId(undefined);
+      updateStatus("Element deleted", "success");
+      return;
+    }
+
+    // Ctrl+Z or Cmd+Z for undo
+    if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) {
+      e.preventDefault();
+      handleUndo();
+      return;
+    }
+
+    // Ctrl+Shift+Z or Cmd+Shift+Z for redo
+    if ((e.ctrlKey || e.metaKey) && e.key === "z" && e.shiftKey) {
+      e.preventDefault();
+      handleRedo();
+      return;
+    }
+
+    // Ctrl+Y or Cmd+Y for redo
+    if ((e.ctrlKey || e.metaKey) && e.key === "y") {
+      e.preventDefault();
+      handleRedo();
+      return;
+    }
+  };
+
+  // Setup keyboard event listener
+  useEffect(() => {
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [
+    selectedElementId,
+    elements,
+    historyIndex,
+    history,
+    cleanupRemovedImages,
+  ]);
+
+  // Setup paste event listener
+  useEffect(() => {
+    document.addEventListener("paste", handlePaste);
+    return () => document.removeEventListener("paste", handlePaste);
+  }, [elements, cursorPosition]);
+
+  // Disable text selection while actively dragging
+  useEffect(() => {
+    if (isDragging) {
+      document.body.style.userSelect = "none";
+    } else {
+      document.body.style.userSelect = "";
+    }
+    return () => {
+      document.body.style.userSelect = "";
+    };
+  }, [isDragging]);
+
+  // Track cursor position and handle dragging with single event listener
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      // Handle rotation drag
+      if (rotateStateRef.current) {
+        const rs = rotateStateRef.current;
+        const currentAngle = Math.atan2(
+          e.clientY - rs.centerY,
+          e.clientX - rs.centerX,
+        );
+        const deltaAngle = (currentAngle - rs.startAngle) * (180 / Math.PI);
+        const newRotation = rs.elementStartRotation + deltaAngle;
+
+        // Apply rotation via direct DOM transform for performance
+        const domEl = document.querySelector(
+          `[data-element-id="${rs.elementId}"]`,
+        ) as HTMLElement;
+        if (domEl) {
+          domEl.style.transform = `rotate(${newRotation}deg)`;
+        }
+        pendingRotationRef.current = newRotation;
+        return;
+      }
+
+      // Drag threshold: only start dragging if moved more than 5 pixels
+      if (dragState && !isDragging) {
+        const deltaX = e.clientX - dragState.startX;
+        const deltaY = e.clientY - dragState.startY;
+        const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+
+        // Only activate drag if threshold exceeded
+        if (distance > 5) {
+          setIsDragging(true);
+        } else {
+          // Below threshold, just update cursor position
+          if (canvasRef.current) {
+            const rect = canvasRef.current.getBoundingClientRect();
+            setCursorPosition({
+              x: e.clientX - rect.left + canvasRef.current.scrollLeft,
+              y: e.clientY - rect.top + canvasRef.current.scrollTop,
+            });
+          }
+          return;
+        }
+      }
+
+      // Handle dragging with smooth mousemove (not dragover)
+      if (isDragging && dragState) {
+        const deltaX = e.clientX - dragState.startX;
+        const deltaY = e.clientY - dragState.startY;
+
+        // Use CSS transform for instant visual feedback (no re-render)
+        const draggedElement = document.querySelector(
+          `[data-element-id="${dragState.elementId}"]`,
+        ) as HTMLElement;
+        if (draggedElement) {
+          // Preserve element rotation during drag
+          const element = elements.find((el) => el.id === dragState.elementId);
+          const rotation = element?.rotation || 0;
+          draggedElement.style.transform = `translate3d(${deltaX}px, ${deltaY}px, 0) rotate(${rotation}deg)`;
+          draggedElementRef.current = draggedElement;
+        }
+
+        // Update ref position for drop
+        dragPositionRef.current = {
+          elementId: dragState.elementId as string,
+          x: Math.max(0, dragState.elementStartX + deltaX),
+          y: Math.max(0, dragState.elementStartY + deltaY),
+        };
+      } else if (!dragState) {
+        // Only update cursor position when NOT waiting to drag
+        if (canvasRef.current) {
+          const rect = canvasRef.current.getBoundingClientRect();
+          setCursorPosition({
+            x: e.clientX - rect.left + canvasRef.current.scrollLeft,
+            y: e.clientY - rect.top + canvasRef.current.scrollTop,
+          });
+        }
+      }
+    };
+
+    const handleMouseUp = () => {
+      // Commit rotation if rotating
+      if (rotateStateRef.current && pendingRotationRef.current !== null) {
+        const rs = rotateStateRef.current;
+        const finalRotation = pendingRotationRef.current % 360;
+        const newElements = elements.map((el) =>
+          el.id === rs.elementId ? { ...el, rotation: finalRotation } : el,
+        );
+        updateElementsWithHistory(newElements);
+        updateStatus("Element rotated", "success");
+        rotateStateRef.current = null;
+        pendingRotationRef.current = null;
+        return;
+      }
+      if (rotateStateRef.current) {
+        rotateStateRef.current = null;
+        pendingRotationRef.current = null;
+        return;
+      }
+
+      if (isDragging && dragState && dragPositionRef.current) {
+        // Restore rotation-only transform (don't clear to "" — React won't
+        // re-apply rotation if it hasn't changed between renders)
+        if (draggedElementRef.current) {
+          const element = elements.find((el) => el.id === dragState.elementId);
+          const rotation = element?.rotation || 0;
+          draggedElementRef.current.style.transform = `rotate(${rotation}deg)`;
+          draggedElementRef.current = null;
+        }
+
+        // Move element to end (highest z-index) and update position
+        const element = elements.find((el) => el.id === dragState.elementId);
+        if (element) {
+          const newElements = elements.filter(
+            (el) => el.id !== dragState.elementId,
+          );
+          newElements.push({
+            ...element,
+            x: dragPositionRef.current.x,
+            y: dragPositionRef.current.y,
+          });
+          updateElementsWithHistory(newElements);
+          updateStatus("Element moved", "success");
+        }
+
+        setIsDragging(false);
+        dragPositionRef.current = null;
+      }
+
+      // Always clear dragState on mouseup (handles click-without-move on edges)
+      setDragState(null);
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [isDragging, dragState, elements]);
+
+  // Handle mouse down on element to start drag
+  const handleElementMouseDown = (elementId: string) => {
+    return (e: React.MouseEvent<HTMLDivElement>) => {
+      e.stopPropagation();
+
+      const element = elements.find((el) => el.id === elementId);
+      if (!element) return;
+
+      // Select the element
+      setSelectedElementId(elementId);
+
+      // Set drag state immediately (edge-based dragging makes intent unambiguous)
+      setDragState({
+        elementId,
+        startX: e.clientX,
+        startY: e.clientY,
+        elementStartX: element.x,
+        elementStartY: element.y,
+      });
+    };
+  };
+
+  // Handle mouse down on rotate handle
+  const handleRotateHandleMouseDown = (elementId: string) => {
+    return (e: React.MouseEvent<HTMLDivElement>) => {
+      e.stopPropagation();
+
+      const element = elements.find((el) => el.id === elementId);
+      if (!element) return;
+
+      setSelectedElementId(elementId);
+
+      const domEl = document.querySelector(
+        `[data-element-id="${elementId}"]`,
+      ) as HTMLElement;
+      if (!domEl) return;
+
+      const rect = domEl.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      const startAngle = Math.atan2(e.clientY - centerY, e.clientX - centerX);
+
+      rotateStateRef.current = {
+        elementId,
+        centerX,
+        centerY,
+        startAngle,
+        elementStartRotation: element.rotation || 0,
+      };
+    };
+  };
+
+  // Handle measurement update for textbox auto-sizing
+  const handleMeasure = (
+    _elementId: string,
+    _width: number,
+    _height: number,
+  ) => {
+    // Measurement callback for textbox auto-sizing (dimensions tracked via ResizeObserver)
+  };
+
+  // Handle rotation
+  const handleRotate = (elementId: string, deltaRotation: number) => {
+    const newElements = elements.map((el) => {
+      if (el.id === elementId) {
+        const currentRotation = el.rotation || 0;
+        return {
+          ...el,
+          rotation: (currentRotation + deltaRotation) % 360,
+        };
+      }
+      return el;
+    });
+    updateElementsWithHistory(newElements);
+    updateStatus("Element rotated", "success");
+  };
+
+  // Auto-save elements to Dexie whenever they change
+  useEffect(() => {
+    if (elements.length > 0) {
+      const timeoutId = setTimeout(() => {
+        saveElements(elements);
+      }, 1000); // Debounce auto-save by 1 second
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [elements, saveElements]);
+
+  // Cleanup: revoke object URLs and delete blobs when component unmounts
+  useEffect(() => {
+    return () => {
+      elements.forEach((el) => {
+        if (el.type === "image" && el.src?.startsWith("blob:")) {
+          URL.revokeObjectURL(el.src);
+        }
+      });
+    };
+  }, []);
+
+  return (
+    <>
+      <Toolbar
+        onAddTextbox={handleAddTextbox}
+        onClearAll={handleClearAll}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
+        canUndo={historyIndex > 0}
+        canRedo={historyIndex < history.length - 1}
+      />
+
+      <Canvas
+        ref={canvasRef}
+        elements={elements}
+        selectedElementId={selectedElementId}
+        onElementContentChange={handleElementContentChange}
+        onElementFocus={handleElementFocus}
+        onElementBlur={handleElementBlur}
+        onElementSelect={handleElementSelect}
+        onCanvasClick={handleCanvasClick}
+        onElementMouseDown={handleElementMouseDown}
+        onRotateHandleMouseDown={handleRotateHandleMouseDown}
+        onMeasure={handleMeasure}
+        onRotate={handleRotate}
+        isDragging={isDragging}
+      />
+    </>
+  );
+}
