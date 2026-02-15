@@ -148,10 +148,11 @@ export default function Textbox({
         onInput={handleInput}
         onFocus={handleFocus}
         onBlur={handleBlur}
+        spellCheck={false}
         onMouseDown={(e) => e.stopPropagation()}
         className={`p-2 text-base outline-none transition-all ${
           isSelected ? "bg-blue-50" : "bg-transparent"
-        } rounded cursor-text break-words text-black select-text`}
+        } rounded cursor-text wrap-break-word text-black select-text`}
         style={{
           fontSize: `${fontSize}px`,
           minHeight: "40px",

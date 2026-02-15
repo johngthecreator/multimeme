@@ -23,7 +23,11 @@ interface RotateState {
   centerX: number;
   centerY: number;
   startAngle: number;
+  startDistance: number;
   elementStartRotation: number;
+  elementStartWidth?: number;
+  elementStartHeight?: number;
+  elementStartFontSize?: number;
 }
 
 export default function Home() {
@@ -49,6 +53,11 @@ export default function Home() {
   const draggedElementRef = useRef<HTMLElement | null>(null);
   const rotateStateRef = useRef<RotateState | null>(null);
   const pendingRotationRef = useRef<number | null>(null);
+  const pendingSizeRef = useRef<{
+    width?: number;
+    height?: number;
+    fontSize?: number;
+  } | null>(null);
 
   // Update status
   const updateStatus = (
@@ -330,23 +339,58 @@ export default function Home() {
   // Track cursor position and handle dragging with single event listener
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-      // Handle rotation drag
+      // Handle rotation and resize drag
       if (rotateStateRef.current) {
         const rs = rotateStateRef.current;
         const currentAngle = Math.atan2(
           e.clientY - rs.centerY,
           e.clientX - rs.centerX,
         );
+        const currentDistance = Math.sqrt(
+          Math.pow(e.clientX - rs.centerX, 2) + Math.pow(e.clientY - rs.centerY, 2),
+        );
+
+        // Calculate rotation
         const deltaAngle = (currentAngle - rs.startAngle) * (180 / Math.PI);
         const newRotation = rs.elementStartRotation + deltaAngle;
 
-        // Apply rotation via direct DOM transform for performance
+        // Calculate size scale factor
+        const scaleFactor = currentDistance / rs.startDistance;
+
+        const element = elements.find((el) => el.id === rs.elementId);
+        if (!element) return;
+
         const domEl = document.querySelector(
           `[data-element-id="${rs.elementId}"]`,
         ) as HTMLElement;
-        if (domEl) {
-          domEl.style.transform = `rotate(${newRotation}deg)`;
+
+        if (element.type === "image") {
+          // Scale image dimensions
+          const newWidth = Math.max(50, (rs.elementStartWidth || 200) * scaleFactor);
+          const newHeight = Math.max(50, (rs.elementStartHeight || 200) * scaleFactor);
+
+          if (domEl) {
+            domEl.style.transform = `rotate(${newRotation}deg)`;
+            domEl.style.width = `${newWidth}px`;
+            domEl.style.height = `${newHeight}px`;
+          }
+
+          pendingSizeRef.current = { width: newWidth, height: newHeight };
+        } else if (element.type === "textbox") {
+          // Scale font size
+          const newFontSize = Math.max(8, Math.min(200, (rs.elementStartFontSize || 16) * scaleFactor));
+
+          if (domEl) {
+            domEl.style.transform = `rotate(${newRotation}deg)`;
+            const contentDiv = domEl.querySelector('[contenteditable]') as HTMLElement;
+            if (contentDiv) {
+              contentDiv.style.fontSize = `${newFontSize}px`;
+            }
+          }
+
+          pendingSizeRef.current = { fontSize: newFontSize };
         }
+
         pendingRotationRef.current = newRotation;
         return;
       }
@@ -409,22 +453,53 @@ export default function Home() {
     };
 
     const handleMouseUp = () => {
-      // Commit rotation if rotating
+      // Commit rotation and resize if rotating/resizing
       if (rotateStateRef.current && pendingRotationRef.current !== null) {
         const rs = rotateStateRef.current;
         const finalRotation = pendingRotationRef.current % 360;
-        const newElements = elements.map((el) =>
-          el.id === rs.elementId ? { ...el, rotation: finalRotation } : el,
-        );
+        const newElements = elements.map((el) => {
+          if (el.id === rs.elementId) {
+            const updates: Partial<CanvasElementData> = { rotation: finalRotation };
+            if (pendingSizeRef.current) {
+              if (pendingSizeRef.current.width !== undefined) {
+                updates.width = pendingSizeRef.current.width;
+              }
+              if (pendingSizeRef.current.height !== undefined) {
+                updates.height = pendingSizeRef.current.height;
+              }
+              if (pendingSizeRef.current.fontSize !== undefined) {
+                updates.fontSize = pendingSizeRef.current.fontSize;
+              }
+            }
+            return { ...el, ...updates };
+          }
+          return el;
+        });
         updateElementsWithHistory(newElements);
-        updateStatus("Element rotated", "success");
+        updateStatus("Element transformed", "success");
+
+        // Clean up DOM overrides
+        const domEl = document.querySelector(
+          `[data-element-id="${rs.elementId}"]`,
+        ) as HTMLElement;
+        if (domEl) {
+          domEl.style.width = "";
+          domEl.style.height = "";
+          const contentDiv = domEl.querySelector('[contenteditable]') as HTMLElement;
+          if (contentDiv) {
+            contentDiv.style.fontSize = "";
+          }
+        }
+
         rotateStateRef.current = null;
         pendingRotationRef.current = null;
+        pendingSizeRef.current = null;
         return;
       }
       if (rotateStateRef.current) {
         rotateStateRef.current = null;
         pendingRotationRef.current = null;
+        pendingSizeRef.current = null;
         return;
       }
 
@@ -511,13 +586,20 @@ export default function Home() {
       const centerX = rect.left + rect.width / 2;
       const centerY = rect.top + rect.height / 2;
       const startAngle = Math.atan2(e.clientY - centerY, e.clientX - centerX);
+      const startDistance = Math.sqrt(
+        Math.pow(e.clientX - centerX, 2) + Math.pow(e.clientY - centerY, 2),
+      );
 
       rotateStateRef.current = {
         elementId,
         centerX,
         centerY,
         startAngle,
+        startDistance,
         elementStartRotation: element.rotation || 0,
+        elementStartWidth: element.width,
+        elementStartHeight: element.height,
+        elementStartFontSize: element.fontSize,
       };
     };
   };
