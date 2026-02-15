@@ -103,11 +103,21 @@ export default function Home() {
   // Add a new textbox
   const handleAddTextbox = () => {
     const newId = `textbox-${Date.now()}`;
+
+    // Calculate center of current viewport
+    const canvas = canvasRef.current;
+    const x = canvas
+      ? canvas.scrollLeft + canvas.clientWidth / 2
+      : 5000 + elements.length * 10;
+    const y = canvas
+      ? canvas.scrollTop + canvas.clientHeight / 2
+      : 5000 + elements.length * 10;
+
     const newElement: CanvasElementData = {
       id: newId,
       type: "textbox",
-      x: 50 + elements.length * 10,
-      y: 50 + elements.length * 10,
+      x,
+      y,
       content: "Edit this text",
       rotation: 0,
       fontSize: 16,
@@ -323,6 +333,40 @@ export default function Home() {
     document.addEventListener("paste", handlePaste);
     return () => document.removeEventListener("paste", handlePaste);
   }, [elements, cursorPosition]);
+
+  // Center canvas view on initial load
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (canvas) {
+      // Scroll to center of the large canvas
+      canvas.scrollLeft = (canvas.scrollWidth - canvas.clientWidth) / 2;
+      canvas.scrollTop = (canvas.scrollHeight - canvas.clientHeight) / 2;
+    }
+  }, []);
+
+  // Prevent trackpad swipe-to-navigate gestures at scroll boundaries
+  useEffect(() => {
+    const preventSwipeNavigation = (e: WheelEvent) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+
+      const atLeftEdge = canvas.scrollLeft === 0 && e.deltaX < 0;
+      const atRightEdge =
+        canvas.scrollLeft >= canvas.scrollWidth - canvas.clientWidth && e.deltaX > 0;
+
+      // Only prevent default at scroll boundaries to stop browser navigation
+      if (atLeftEdge || atRightEdge) {
+        e.preventDefault();
+      }
+    };
+
+    const canvas = canvasRef.current;
+    if (canvas) {
+      // Use passive: false to allow preventDefault
+      canvas.addEventListener("wheel", preventSwipeNavigation, { passive: false });
+      return () => canvas.removeEventListener("wheel", preventSwipeNavigation);
+    }
+  }, []);
 
   // Disable text selection while actively dragging
   useEffect(() => {

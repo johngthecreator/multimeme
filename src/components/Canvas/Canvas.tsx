@@ -51,8 +51,8 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(function Canvas({
       {/* Canvas background grid (optional visual aid) */}
       <div className="absolute inset-0 opacity-5 pointer-events-none" />
 
-      {/* Render all canvas elements */}
-      <div className="relative w-full h-full min-h-screen">
+      {/* Render all canvas elements - infinite canvas size */}
+      <div className="relative" style={{ width: '10000px', height: '10000px' }}>
         {elements.map((element) => (
           <CanvasElement
             key={element.id}
