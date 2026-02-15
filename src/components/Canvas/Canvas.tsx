@@ -47,7 +47,7 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(function Canvas(
   return (
     <div
       ref={ref}
-      className={`w-screen h-screen relative bg-white overflow-auto cursor-default transition-opacity select-none ${
+      className={`w-screen h-screen no-scrollbar relative bg-white overflow-auto cursor-default transition-opacity select-none ${
         isDragging ? "opacity-90" : ""
       }`}
       onClick={handleCanvasClick}

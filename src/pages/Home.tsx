@@ -334,14 +334,50 @@ export default function Home() {
     return () => document.removeEventListener("paste", handlePaste);
   }, [elements, cursorPosition]);
 
-  // Center canvas view on initial load
+  // Load canvas scroll position from URL or center by default
   useEffect(() => {
     const canvas = canvasRef.current;
     if (canvas) {
-      // Scroll to center of the large canvas
-      canvas.scrollLeft = (canvas.scrollWidth - canvas.clientWidth) / 2;
-      canvas.scrollTop = (canvas.scrollHeight - canvas.clientHeight) / 2;
+      const params = new URLSearchParams(window.location.search);
+      const scrollX = params.get('scrollX');
+      const scrollY = params.get('scrollY');
+
+      if (scrollX && scrollY) {
+        // Restore from URL
+        canvas.scrollLeft = parseInt(scrollX, 10);
+        canvas.scrollTop = parseInt(scrollY, 10);
+      } else {
+        // Default to center of the large canvas
+        canvas.scrollLeft = (canvas.scrollWidth - canvas.clientWidth) / 2;
+        canvas.scrollTop = (canvas.scrollHeight - canvas.clientHeight) / 2;
+      }
     }
+  }, []);
+
+  // Save canvas scroll position to URL query params (debounced)
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    let timeoutId: number;
+
+    const handleScroll = () => {
+      clearTimeout(timeoutId);
+      timeoutId = window.setTimeout(() => {
+        const params = new URLSearchParams(window.location.search);
+        params.set('scrollX', Math.round(canvas.scrollLeft).toString());
+        params.set('scrollY', Math.round(canvas.scrollTop).toString());
+
+        const newUrl = `${window.location.pathname}?${params.toString()}`;
+        window.history.replaceState({}, '', newUrl);
+      }, 1000);
+    };
+
+    canvas.addEventListener('scroll', handleScroll);
+    return () => {
+      canvas.removeEventListener('scroll', handleScroll);
+      clearTimeout(timeoutId);
+    };
   }, []);
 
   // Prevent trackpad swipe-to-navigate gestures at scroll boundaries
