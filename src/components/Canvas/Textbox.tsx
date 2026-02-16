@@ -239,7 +239,7 @@ export default function Textbox({
               onToggleFont?.(id);
             }}
           >
-            {fontFamily === "comic-sans" ? "Inter" : "Comic Sans"}
+            {fontFamily === "comic-sans" ? "Comic" : "Inter"}
           </button>
 
           {/* Rotate handle at bottom-right */}

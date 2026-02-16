@@ -12,11 +12,17 @@ interface StatusState {
 }
 
 interface DragState {
-  elementId: string | null;
+  elementIds: string[];
   startX: number;
   startY: number;
-  elementStartX: number;
-  elementStartY: number;
+  elementStarts: Map<string, { x: number; y: number }>;
+}
+
+interface MarqueeState {
+  startX: number;
+  startY: number;
+  currentX: number;
+  currentY: number;
 }
 
 interface RotateState {
@@ -31,11 +37,13 @@ interface RotateState {
   elementStartFontSize?: number;
 }
 
+export type { MarqueeState };
+
 export default function Home() {
   const [elements, setElements] = useState<CanvasElementData[]>([]);
-  const [selectedElementId, setSelectedElementId] = useState<
-    string | undefined
-  >();
+  const [selectedElementIds, setSelectedElementIds] = useState<Set<string>>(
+    new Set(),
+  );
   const [statusState, setStatusState] = useState<StatusState>({
     message: "Ready",
     type: "info",
@@ -45,14 +53,15 @@ export default function Home() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [marqueeState, setMarqueeState] = useState<MarqueeState | null>(null);
   const [cursorPosition, setCursorPosition] = useState({ x: 50, y: 50 });
   const canvasRef = useRef<HTMLDivElement>(null);
-  const dragPositionRef = useRef<{
-    elementId: string;
-    x: number;
-    y: number;
-  } | null>(null);
-  const draggedElementRef = useRef<HTMLElement | null>(null);
+  const dragPositionsRef = useRef<Map<
+    string,
+    { x: number; y: number }
+  > | null>(null);
+  const draggedElementsRef = useRef<HTMLElement[]>([]);
+  const marqueeJustEndedRef = useRef(false);
   const rotateStateRef = useRef<RotateState | null>(null);
   const pendingRotationRef = useRef<number | null>(null);
   const pendingSizeRef = useRef<{
@@ -144,7 +153,7 @@ export default function Home() {
 
     const newElements = [...elements, newElement];
     updateElementsWithHistory(newElements);
-    setSelectedElementId(newId);
+    setSelectedElementIds(new Set([newId]));
     updateStatus("Textbox added", "success");
   };
 
@@ -157,7 +166,7 @@ export default function Home() {
 
     if (window.confirm("Are you sure you want to clear all elements?")) {
       updateElementsWithHistory([]);
-      setSelectedElementId(undefined);
+      setSelectedElementIds(new Set());
       updateStatus("Canvas cleared", "success");
     }
   };
@@ -172,7 +181,7 @@ export default function Home() {
 
   // Handle element focus
   const handleElementFocus = (id: string) => {
-    setSelectedElementId(id);
+    setSelectedElementIds(new Set([id]));
   };
 
   // Handle element blur - delete empty textboxes
@@ -185,23 +194,31 @@ export default function Home() {
       updateElementsWithHistory(newElements);
       updateStatus("Empty textbox deleted", "info");
 
-      if (selectedElementId === id) {
-        setSelectedElementId(undefined);
+      if (selectedElementIds.has(id)) {
+        const next = new Set(selectedElementIds);
+        next.delete(id);
+        setSelectedElementIds(next);
       }
     }
   };
 
   // Handle element selection (for images and canvas clicks)
   const handleElementSelect = (id: string) => {
-    setSelectedElementId(id);
+    setSelectedElementIds(new Set([id]));
   };
 
   // Handle font toggle
   const handleToggleFont = (id: string) => {
     const newElements = elements.map((el) => {
       if (el.id === id) {
-        const current = el.fontFamily || 'sans';
-        return { ...el, fontFamily: current === 'sans' ? 'comic-sans' as const : 'sans' as const };
+        const current = el.fontFamily || "sans";
+        return {
+          ...el,
+          fontFamily:
+            current === "sans"
+              ? ("comic-sans" as const)
+              : ("sans" as const),
+        };
       }
       return el;
     });
@@ -226,7 +243,8 @@ export default function Home() {
         const current = el.textColor || "black";
         return {
           ...el,
-          textColor: current === "black" ? ("white" as const) : ("black" as const),
+          textColor:
+            current === "black" ? ("white" as const) : ("black" as const),
         };
       }
       return el;
@@ -234,9 +252,13 @@ export default function Home() {
     updateElementsWithHistory(newElements);
   };
 
-  // Handle canvas click to deselect
+  // Handle canvas click to deselect (skip if a real marquee just finished)
   const handleCanvasClick = () => {
-    setSelectedElementId(undefined);
+    if (marqueeJustEndedRef.current) {
+      marqueeJustEndedRef.current = false;
+      return;
+    }
+    setSelectedElementIds(new Set());
   };
 
   // Handle paste event for images
@@ -290,7 +312,7 @@ export default function Home() {
 
         const newElements = [...elements, newElement];
         updateElementsWithHistory(newElements);
-        setSelectedElementId(newElement.id);
+        setSelectedElementIds(new Set([newElement.id]));
         updateStatus("Image pasted successfully", "success");
       };
       img.src = objectUrl;
@@ -315,7 +337,7 @@ export default function Home() {
       const newIndex = historyIndex - 1;
       setHistoryIndex(newIndex);
       setElements(history[newIndex]);
-      setSelectedElementId(undefined);
+      setSelectedElementIds(new Set());
       updateStatus("Undone", "info");
     }
   };
@@ -326,24 +348,34 @@ export default function Home() {
       const newIndex = historyIndex + 1;
       setHistoryIndex(newIndex);
       setElements(history[newIndex]);
-      setSelectedElementId(undefined);
+      setSelectedElementIds(new Set());
       updateStatus("Redone", "info");
     }
   };
 
   // Handle delete key
   const handleKeyDown = (e: KeyboardEvent) => {
-    // Delete selected element
-    if ((e.key === "Delete" || e.key === "Backspace") && selectedElementId) {
+    // Delete selected elements
+    if (
+      (e.key === "Delete" || e.key === "Backspace") &&
+      selectedElementIds.size > 0
+    ) {
       // Don't delete if user is editing text in a contentEditable
       const activeEl = document.activeElement;
       if (activeEl && (activeEl as HTMLElement).isContentEditable) return;
 
       e.preventDefault();
-      const newElements = elements.filter((el) => el.id !== selectedElementId);
+      const newElements = elements.filter(
+        (el) => !selectedElementIds.has(el.id),
+      );
       updateElementsWithHistory(newElements);
-      setSelectedElementId(undefined);
-      updateStatus("Element deleted", "success");
+      setSelectedElementIds(new Set());
+      updateStatus(
+        selectedElementIds.size === 1
+          ? "Element deleted"
+          : `${selectedElementIds.size} elements deleted`,
+        "success",
+      );
       return;
     }
 
@@ -373,7 +405,7 @@ export default function Home() {
   useEffect(() => {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedElementId, elements, historyIndex, history]);
+  }, [selectedElementIds, elements, historyIndex, history]);
 
   // Setup paste event listener
   useEffect(() => {
@@ -454,9 +486,9 @@ export default function Home() {
     }
   }, []);
 
-  // Disable text selection while actively dragging
+  // Disable text selection while actively dragging or marquee-selecting
   useEffect(() => {
-    if (isDragging) {
+    if (isDragging || marqueeState) {
       document.body.style.userSelect = "none";
     } else {
       document.body.style.userSelect = "";
@@ -464,9 +496,64 @@ export default function Home() {
     return () => {
       document.body.style.userSelect = "";
     };
-  }, [isDragging]);
+  }, [isDragging, marqueeState]);
 
-  // Track cursor position and handle dragging with single event listener
+  // Helper: get canvas-relative coordinates from mouse event
+  const getCanvasCoords = useCallback((e: MouseEvent) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: e.clientX - rect.left + canvas.scrollLeft,
+      y: e.clientY - rect.top + canvas.scrollTop,
+    };
+  }, []);
+
+  // Helper: compute marquee rect (normalized so x/y is top-left)
+  const getMarqueeRect = useCallback((m: MarqueeState) => {
+    const x = Math.min(m.startX, m.currentX);
+    const y = Math.min(m.startY, m.currentY);
+    const w = Math.abs(m.currentX - m.startX);
+    const h = Math.abs(m.currentY - m.startY);
+    return { x, y, w, h };
+  }, []);
+
+  // Helper: check if element intersects marquee rect
+  const elementIntersectsRect = useCallback(
+    (
+      el: CanvasElementData,
+      rect: { x: number; y: number; w: number; h: number },
+    ) => {
+      let elW = el.width;
+      let elH = el.height;
+
+      // For textboxes without explicit width/height, try DOM measurement
+      if (!elW || !elH) {
+        const domEl = document.querySelector(
+          `[data-element-id="${el.id}"]`,
+        ) as HTMLElement;
+        if (domEl) {
+          const domRect = domEl.getBoundingClientRect();
+          elW = elW || domRect.width;
+          elH = elH || domRect.height;
+        } else {
+          elW = elW || 100;
+          elH = elH || 30;
+        }
+      }
+
+      // AABB intersection test
+      return !(
+        el.x + elW < rect.x ||
+        el.x > rect.x + rect.w ||
+        el.y + elH < rect.y ||
+        el.y > rect.y + rect.h
+      );
+    },
+    [],
+  );
+
+  // Track cursor position and handle dragging/marquee with single event listener
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       // Handle rotation and resize drag
@@ -537,6 +624,28 @@ export default function Home() {
         return;
       }
 
+      // Handle marquee drag
+      if (marqueeState) {
+        const coords = getCanvasCoords(e);
+        const newMarquee = {
+          ...marqueeState,
+          currentX: coords.x,
+          currentY: coords.y,
+        };
+        setMarqueeState(newMarquee);
+
+        // Compute which elements intersect the marquee
+        const rect = getMarqueeRect(newMarquee);
+        const intersecting = new Set<string>();
+        for (const el of elements) {
+          if (elementIntersectsRect(el, rect)) {
+            intersecting.add(el.id);
+          }
+        }
+        setSelectedElementIds(intersecting);
+        return;
+      }
+
       // Drag threshold: only start dragging if moved more than 5 pixels
       if (dragState && !isDragging) {
         const deltaX = e.clientX - dragState.startX;
@@ -559,30 +668,48 @@ export default function Home() {
         }
       }
 
-      // Handle dragging with smooth mousemove (not dragover)
+      // Handle multi-drag with smooth mousemove
       if (isDragging && dragState) {
         const deltaX = e.clientX - dragState.startX;
         const deltaY = e.clientY - dragState.startY;
 
-        // Use CSS transform for instant visual feedback (no re-render)
-        const draggedElement = document.querySelector(
-          `[data-element-id="${dragState.elementId}"]`,
-        ) as HTMLElement;
-        if (draggedElement) {
-          // Preserve element rotation during drag
-          const element = elements.find((el) => el.id === dragState.elementId);
-          const rotation = element?.rotation || 0;
-          draggedElement.style.transform = `translate3d(${deltaX}px, ${deltaY}px, 0) rotate(${rotation}deg)`;
-          draggedElementRef.current = draggedElement;
+        // Check if this is a mixed text+image drag (images have CSS transition-all)
+        const hasImages = dragState.elementIds.some((id) => {
+          const el = elements.find((e) => e.id === id);
+          return el?.type === "image";
+        });
+
+        // Apply CSS transform to all dragged elements for instant visual feedback
+        const newPositions = new Map<string, { x: number; y: number }>();
+        for (const id of dragState.elementIds) {
+          const start = dragState.elementStarts.get(id);
+          if (!start) continue;
+
+          const domEl = document.querySelector(
+            `[data-element-id="${id}"]`,
+          ) as HTMLElement;
+          if (domEl) {
+            const element = elements.find((el) => el.id === id);
+            const rotation = element?.rotation || 0;
+            // Match image transition lag for textboxes in mixed selections
+            if (hasImages && element?.type === "textbox") {
+              domEl.style.transition =
+                "transform 150ms cubic-bezier(0.4, 0, 0.2, 1)";
+            }
+            domEl.style.transform = `translate3d(${deltaX}px, ${deltaY}px, 0) rotate(${rotation}deg)`;
+            if (!draggedElementsRef.current.includes(domEl)) {
+              draggedElementsRef.current.push(domEl);
+            }
+          }
+
+          newPositions.set(id, {
+            x: Math.max(0, start.x + deltaX),
+            y: Math.max(0, start.y + deltaY),
+          });
         }
 
-        // Update ref position for drop
-        dragPositionRef.current = {
-          elementId: dragState.elementId as string,
-          x: Math.max(0, dragState.elementStartX + deltaX),
-          y: Math.max(0, dragState.elementStartY + deltaY),
-        };
-      } else if (!dragState) {
+        dragPositionsRef.current = newPositions;
+      } else if (!dragState && !marqueeState) {
         // Only update cursor position when NOT waiting to drag
         if (canvasRef.current) {
           const rect = canvasRef.current.getBoundingClientRect();
@@ -649,33 +776,49 @@ export default function Home() {
         return;
       }
 
-      if (isDragging && dragState && dragPositionRef.current) {
-        // Restore rotation-only transform (don't clear to "" — React won't
-        // re-apply rotation if it hasn't changed between renders)
-        if (draggedElementRef.current) {
-          const element = elements.find((el) => el.id === dragState.elementId);
-          const rotation = element?.rotation || 0;
-          draggedElementRef.current.style.transform = `rotate(${rotation}deg)`;
-          draggedElementRef.current = null;
+      // Finalize marquee selection
+      if (marqueeState) {
+        const rect = getMarqueeRect(marqueeState);
+        if (rect.w > 3 || rect.h > 3) {
+          marqueeJustEndedRef.current = true;
         }
+        setMarqueeState(null);
+        // selectedElementIds already set live during mousemove
+        return;
+      }
 
-        // Move element to end (highest z-index) and update position
-        const element = elements.find((el) => el.id === dragState.elementId);
-        if (element) {
-          const newElements = elements.filter(
-            (el) => el.id !== dragState.elementId,
-          );
-          newElements.push({
-            ...element,
-            x: dragPositionRef.current.x,
-            y: dragPositionRef.current.y,
-          });
-          updateElementsWithHistory(newElements);
-          updateStatus("Element moved", "success");
+      if (isDragging && dragState && dragPositionsRef.current) {
+        // Restore rotation-only transforms and clear inline transition on all dragged elements
+        for (const domEl of draggedElementsRef.current) {
+          const id = domEl.getAttribute("data-element-id");
+          const element = id ? elements.find((el) => el.id === id) : null;
+          const rotation = element?.rotation || 0;
+          domEl.style.transform = `rotate(${rotation}deg)`;
+          domEl.style.transition = "";
         }
+        draggedElementsRef.current = [];
+
+        // Move dragged elements to end (highest z-index) and update positions
+        const positions = dragPositionsRef.current;
+        const draggedIds = new Set(dragState.elementIds);
+        const nonDragged = elements.filter((el) => !draggedIds.has(el.id));
+        const dragged = elements.filter((el) => draggedIds.has(el.id));
+        const updatedDragged = dragged.map((el) => {
+          const pos = positions.get(el.id);
+          return pos ? { ...el, x: pos.x, y: pos.y } : el;
+        });
+
+        const newElements = [...nonDragged, ...updatedDragged];
+        updateElementsWithHistory(newElements);
+        updateStatus(
+          dragState.elementIds.length === 1
+            ? "Element moved"
+            : `${dragState.elementIds.length} elements moved`,
+          "success",
+        );
 
         setIsDragging(false);
-        dragPositionRef.current = null;
+        dragPositionsRef.current = null;
       }
 
       // Always clear dragState on mouseup (handles click-without-move on edges)
@@ -689,7 +832,7 @@ export default function Home() {
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [isDragging, dragState, elements]);
+  }, [isDragging, dragState, elements, marqueeState]);
 
   // Handle mouse down on element to start drag
   const handleElementMouseDown = (elementId: string) => {
@@ -699,18 +842,60 @@ export default function Home() {
       const element = elements.find((el) => el.id === elementId);
       if (!element) return;
 
-      // Select the element
-      setSelectedElementId(elementId);
+      // Shift+click: toggle selection, don't start drag
+      if (e.shiftKey) {
+        const next = new Set(selectedElementIds);
+        if (next.has(elementId)) {
+          next.delete(elementId);
+        } else {
+          next.add(elementId);
+        }
+        setSelectedElementIds(next);
+        return;
+      }
 
-      // Set drag state immediately (edge-based dragging makes intent unambiguous)
-      setDragState({
-        elementId,
-        startX: e.clientX,
-        startY: e.clientY,
-        elementStartX: element.x,
-        elementStartY: element.y,
-      });
+      // If element is already selected, start drag for ALL selected elements
+      if (selectedElementIds.has(elementId)) {
+        const ids = Array.from(selectedElementIds);
+        const starts = new Map<string, { x: number; y: number }>();
+        for (const id of ids) {
+          const el = elements.find((e) => e.id === id);
+          if (el) starts.set(id, { x: el.x, y: el.y });
+        }
+        setDragState({
+          elementIds: ids,
+          startX: e.clientX,
+          startY: e.clientY,
+          elementStarts: starts,
+        });
+      } else {
+        // Select only this element and start drag for it
+        setSelectedElementIds(new Set([elementId]));
+        setDragState({
+          elementIds: [elementId],
+          startX: e.clientX,
+          startY: e.clientY,
+          elementStarts: new Map([[elementId, { x: element.x, y: element.y }]]),
+        });
+      }
     };
+  };
+
+  // Handle mouse down on canvas background to start marquee
+  const handleCanvasMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    // Only start marquee on left click on empty canvas
+    if (e.button !== 0) return;
+    if ((e.target as HTMLElement).closest("[data-element-id]")) return;
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left + canvas.scrollLeft;
+    const y = e.clientY - rect.top + canvas.scrollTop;
+
+    setMarqueeState({ startX: x, startY: y, currentX: x, currentY: y });
+    setSelectedElementIds(new Set());
   };
 
   // Handle mouse down on rotate handle
@@ -721,7 +906,7 @@ export default function Home() {
       const element = elements.find((el) => el.id === elementId);
       if (!element) return;
 
-      setSelectedElementId(elementId);
+      setSelectedElementIds(new Set([elementId]));
 
       const domEl = document.querySelector(
         `[data-element-id="${elementId}"]`,
@@ -819,12 +1004,13 @@ export default function Home() {
       <Canvas
         ref={canvasRef}
         elements={elements}
-        selectedElementId={selectedElementId}
+        selectedElementIds={selectedElementIds}
         onElementContentChange={handleElementContentChange}
         onElementFocus={handleElementFocus}
         onElementBlur={handleElementBlur}
         onElementSelect={handleElementSelect}
         onCanvasClick={handleCanvasClick}
+        onCanvasMouseDown={handleCanvasMouseDown}
         onElementMouseDown={handleElementMouseDown}
         onRotateHandleMouseDown={handleRotateHandleMouseDown}
         onMeasure={handleMeasure}
@@ -833,6 +1019,7 @@ export default function Home() {
         onToggleItalic={handleToggleItalic}
         onToggleTextColor={handleToggleTextColor}
         isDragging={isDragging}
+        marqueeState={marqueeState}
       />
     </>
   );

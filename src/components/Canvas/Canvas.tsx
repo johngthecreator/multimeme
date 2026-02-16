@@ -1,15 +1,17 @@
 import { forwardRef } from "react";
 import type { CanvasElementData } from "./CanvasElement";
+import type { MarqueeState } from "../../pages/Home";
 import CanvasElement from "./CanvasElement";
 
 interface CanvasProps {
   elements: CanvasElementData[];
-  selectedElementId?: string;
+  selectedElementIds: Set<string>;
   onElementContentChange: (id: string, content: string) => void;
   onElementFocus: (id: string) => void;
   onElementBlur: (id: string) => void;
   onElementSelect: (id: string) => void;
   onCanvasClick?: () => void;
+  onCanvasMouseDown?: (e: React.MouseEvent<HTMLDivElement>) => void;
   onElementMouseDown?: (
     elementId: string,
   ) => (e: React.MouseEvent<HTMLDivElement>) => void;
@@ -22,17 +24,19 @@ interface CanvasProps {
   onToggleItalic?: (id: string) => void;
   onToggleTextColor?: (id: string) => void;
   isDragging?: boolean;
+  marqueeState?: MarqueeState | null;
 }
 
 const Canvas = forwardRef<HTMLDivElement, CanvasProps>(function Canvas(
   {
     elements,
-    selectedElementId,
+    selectedElementIds,
     onElementContentChange,
     onElementFocus,
     onElementBlur,
     onElementSelect,
     onCanvasClick,
+    onCanvasMouseDown,
     onElementMouseDown,
     onRotateHandleMouseDown,
     onRotate,
@@ -41,6 +45,7 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(function Canvas(
     onToggleItalic,
     onToggleTextColor,
     isDragging = false,
+    marqueeState,
   },
   ref,
 ) {
@@ -50,6 +55,16 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(function Canvas(
     onCanvasClick?.();
   };
 
+  // Compute marquee rect for rendering
+  const marqueeRect = marqueeState
+    ? {
+        left: Math.min(marqueeState.startX, marqueeState.currentX),
+        top: Math.min(marqueeState.startY, marqueeState.currentY),
+        width: Math.abs(marqueeState.currentX - marqueeState.startX),
+        height: Math.abs(marqueeState.currentY - marqueeState.startY),
+      }
+    : null;
+
   return (
     <div
       ref={ref}
@@ -57,6 +72,7 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(function Canvas(
         isDragging ? "opacity-90" : ""
       }`}
       onClick={handleCanvasClick}
+      onMouseDown={onCanvasMouseDown}
       data-testid="canvas"
       role="main"
       aria-label="Canvas for adding and editing elements"
@@ -70,7 +86,7 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(function Canvas(
           <CanvasElement
             key={element.id}
             {...element}
-            isSelected={selectedElementId === element.id}
+            isSelected={selectedElementIds.has(element.id)}
             onContentChange={onElementContentChange}
             onFocus={onElementFocus}
             onBlur={onElementBlur}
@@ -85,6 +101,19 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(function Canvas(
             isDragging={isDragging}
           />
         ))}
+
+        {/* Marquee selection overlay */}
+        {marqueeRect && (
+          <div
+            className="absolute bg-blue-500/10 border border-blue-500 pointer-events-none"
+            style={{
+              left: marqueeRect.left,
+              top: marqueeRect.top,
+              width: marqueeRect.width,
+              height: marqueeRect.height,
+            }}
+          />
+        )}
       </div>
 
       {/* Empty state message - positioned at center of canvas */}
