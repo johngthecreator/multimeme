@@ -292,7 +292,7 @@ export default function Image({
     const sx = width / crop.width;
     const sy = height / crop.height;
     return (
-      <div style={{ width, height, overflow: 'hidden', position: 'relative', borderRadius: '0.25rem' }}>
+      <div data-crop-container style={{ width, height, overflow: 'hidden', position: 'relative', borderRadius: '0.25rem' }}>
         <img
           ref={imgRef}
           src={src}
@@ -456,6 +456,7 @@ export default function Image({
       tabIndex={0}
       data-element-id={id}
       data-element-type="image"
+      {...(crop ? { 'data-crop-info': JSON.stringify({ x: crop.x, y: crop.y, w: crop.width, h: crop.height, nw, nh }) } : {})}
     >
       {/* Rotation badge */}
       {rotation !== 0 && (

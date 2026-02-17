@@ -264,9 +264,28 @@ export function useCanvasInteractions({
           );
 
           if (domEl) {
+            domEl.style.transition = 'none';
             domEl.style.transform = `rotate(${newRotation}deg)`;
             domEl.style.width = `${newWidth}px`;
             domEl.style.height = `${newHeight}px`;
+
+            // Update inner crop elements if present
+            const cropInfoAttr = domEl.dataset.cropInfo;
+            if (cropInfoAttr) {
+              const ci = JSON.parse(cropInfoAttr);
+              const cropContainer = domEl.querySelector('[data-crop-container]') as HTMLElement;
+              const cropImg = cropContainer?.querySelector('img') as HTMLElement;
+              if (cropContainer && cropImg) {
+                cropContainer.style.width = `${newWidth}px`;
+                cropContainer.style.height = `${newHeight}px`;
+                const sx = newWidth / ci.w;
+                const sy = newHeight / ci.h;
+                cropImg.style.width = `${ci.nw * sx}px`;
+                cropImg.style.height = `${ci.nh * sy}px`;
+                cropImg.style.left = `${-ci.x * sx}px`;
+                cropImg.style.top = `${-ci.y * sy}px`;
+              }
+            }
           }
 
           pendingSizeRef.current = { width: newWidth, height: newHeight };
@@ -415,6 +434,7 @@ export function useCanvasInteractions({
           `[data-element-id="${rs.elementId}"]`,
         ) as HTMLElement;
         if (domEl) {
+          domEl.style.transition = "";
           domEl.style.width = "";
           domEl.style.height = "";
           const contentDiv = domEl.querySelector(
@@ -422,6 +442,19 @@ export function useCanvasInteractions({
           ) as HTMLElement;
           if (contentDiv) {
             contentDiv.style.fontSize = "";
+          }
+          // Clear inner crop element overrides
+          const cropContainer = domEl.querySelector('[data-crop-container]') as HTMLElement;
+          const cropImg = cropContainer?.querySelector('img') as HTMLElement;
+          if (cropContainer) {
+            cropContainer.style.width = "";
+            cropContainer.style.height = "";
+          }
+          if (cropImg) {
+            cropImg.style.width = "";
+            cropImg.style.height = "";
+            cropImg.style.left = "";
+            cropImg.style.top = "";
           }
         }
 
