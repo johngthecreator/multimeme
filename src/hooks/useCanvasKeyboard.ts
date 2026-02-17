@@ -36,6 +36,7 @@ export function useCanvasKeyboard({
       ) {
         const activeEl = document.activeElement;
         if (activeEl && (activeEl as HTMLElement).isContentEditable) return;
+        if (document.querySelector('[data-crop-active]')) return;
 
         e.preventDefault();
         const newElements = elements.filter(

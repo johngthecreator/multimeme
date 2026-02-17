@@ -1,6 +1,13 @@
 import Textbox from './Textbox';
 import Image from './Image';
 
+export interface CropRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export interface CanvasElementData {
   id: string;
   type: 'textbox' | 'image';
@@ -15,6 +22,9 @@ export interface CanvasElementData {
   fontFamily?: 'comic-sans' | 'sans';
   italic?: boolean;
   textColor?: 'black' | 'white';
+  naturalWidth?: number;
+  naturalHeight?: number;
+  crop?: CropRect;
 }
 
 interface CanvasElementProps extends CanvasElementData {
@@ -31,6 +41,7 @@ interface CanvasElementProps extends CanvasElementData {
   onToggleItalic?: (id: string) => void;
   onToggleTextColor?: (id: string) => void;
   onRemoveBackground?: (id: string) => void;
+  onCropCommit?: (id: string, crop: import('./CanvasElement').CropRect, newWidth: number, newHeight: number, naturalWidth: number, naturalHeight: number) => void;
   isRemovingBackground?: boolean;
   isDragging?: boolean;
 }
@@ -62,8 +73,12 @@ export default function CanvasElement({
   onToggleItalic,
   onToggleTextColor,
   onRemoveBackground,
+  onCropCommit,
   isRemovingBackground = false,
   isDragging = false,
+  naturalWidth,
+  naturalHeight,
+  crop,
 }: CanvasElementProps) {
   if (type === 'textbox') {
     return (
@@ -111,8 +126,12 @@ export default function CanvasElement({
         onMouseDown={onMouseDown}
         onRotateHandleMouseDown={onRotateHandleMouseDown}
         onRemoveBackground={onRemoveBackground}
+        onCropCommit={onCropCommit}
         isRemovingBackground={isRemovingBackground}
         isDragging={isDragging}
+        naturalWidth={naturalWidth}
+        naturalHeight={naturalHeight}
+        crop={crop}
       />
     );
   }

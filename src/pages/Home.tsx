@@ -68,7 +68,7 @@ export default function Home() {
   // Element CRUD + property toggles + paste
   const {
     handleAddTextbox,
-    handleClearAll,
+    // handleClearAll,
     handleElementContentChange,
     handleElementFocus,
     handleElementBlur,
@@ -80,6 +80,7 @@ export default function Home() {
     handleMeasure,
     handleCleanupUnreferencedImages,
     handleRemoveBackground,
+    handleCropImage,
     bgRemovalProcessingIds,
   } = useCanvasElements({
     elements,
@@ -116,7 +117,7 @@ export default function Home() {
     <>
       <Toolbar
         onAddTextbox={handleAddTextbox}
-        onClearAll={handleClearAll}
+        // onClearAll={handleClearAll}
         onUndo={handleUndo}
         onRedo={handleRedo}
         canUndo={canUndo}
@@ -149,6 +150,7 @@ export default function Home() {
         onToggleItalic={handleToggleItalic}
         onToggleTextColor={handleToggleTextColor}
         onRemoveBackground={handleRemoveBackground}
+        onCropImage={handleCropImage}
         bgRemovalProcessingIds={bgRemovalProcessingIds}
         isDragging={isDragging}
         marqueeState={marqueeState}

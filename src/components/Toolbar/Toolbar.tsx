@@ -1,11 +1,12 @@
 import { Settings as SettingsIcon } from "lucide-react";
 import AddTextboxButton from "./AddTextboxButton";
-import ClearButton from "./ClearButton";
+// import ClearButton from "./ClearButton";
 import UndoRedoButtons from "./UndoRedoButtons";
+import gloopLogo from "../../assets/gloop.svg";
 
 interface ToolbarProps {
   onAddTextbox: () => void;
-  onClearAll: () => void;
+  // onClearAll: () => void;
   onUndo: () => void;
   onRedo: () => void;
   canUndo?: boolean;
@@ -15,7 +16,7 @@ interface ToolbarProps {
 
 export default function Toolbar({
   onAddTextbox,
-  onClearAll,
+  // onClearAll,
   onUndo,
   onRedo,
   canUndo = false,
@@ -31,10 +32,8 @@ export default function Toolbar({
         boxShadow: "0 20px 40px rgba(0,0,0,0.15), 0 0 1px rgba(0,0,0,0.1)",
       }}
     >
-      <nav className="flex items-center justify-center gap-6">
-        <AddTextboxButton onClick={onAddTextbox} />
-        <div className="h-6 w-px bg-gray-300"></div>
-        <ClearButton onClick={onClearAll} />
+      <nav className="flex items-center justify-center gap-2">
+        <img src={gloopLogo} className="h-10" />
         <div className="h-6 w-px bg-gray-300"></div>
         <UndoRedoButtons
           onUndo={onUndo}
@@ -42,7 +41,8 @@ export default function Toolbar({
           canUndo={canUndo}
           canRedo={canRedo}
         />
-        <div className="h-6 w-px bg-gray-300"></div>
+        <AddTextboxButton onClick={onAddTextbox} />
+        {/* <ClearButton onClick={onClearAll} /> */}
         <button
           onClick={onOpenSettings}
           className="p-2 bg-gray-300 text-white rounded-xl hover:bg-gray-400 transition-colors"

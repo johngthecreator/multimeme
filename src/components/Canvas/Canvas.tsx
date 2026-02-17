@@ -24,6 +24,7 @@ interface CanvasProps {
   onToggleItalic?: (id: string) => void;
   onToggleTextColor?: (id: string) => void;
   onRemoveBackground?: (id: string) => void;
+  onCropImage?: (id: string, crop: import('./CanvasElement').CropRect, newWidth: number, newHeight: number, naturalWidth: number, naturalHeight: number) => void;
   bgRemovalProcessingIds?: Set<string>;
   isDragging?: boolean;
   marqueeState?: MarqueeState | null;
@@ -47,6 +48,7 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(function Canvas(
     onToggleItalic,
     onToggleTextColor,
     onRemoveBackground,
+    onCropImage,
     bgRemovalProcessingIds,
     isDragging = false,
     marqueeState,
@@ -103,6 +105,7 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(function Canvas(
             onToggleItalic={onToggleItalic}
             onToggleTextColor={onToggleTextColor}
             onRemoveBackground={onRemoveBackground}
+            onCropCommit={onCropImage}
             isRemovingBackground={bgRemovalProcessingIds?.has(element.id)}
             isDragging={isDragging}
           />

@@ -18,7 +18,7 @@ export default function UndoRedoButtons({
       <button
         onClick={onUndo}
         disabled={!canUndo}
-        className="p-2 bg-gray-300 text-white rounded-xl hover:bg-gray-400 disabled:bg-gray-100 disabled:cursor-not-allowed transition-colors"
+        className="p-2 bg-pink-300 text-white rounded-xl hover:bg-pink-400 disabled:bg-gray-100 disabled:cursor-not-allowed transition-colors"
         title="Undo last action"
         aria-label="Undo"
       >
@@ -27,7 +27,7 @@ export default function UndoRedoButtons({
       <button
         onClick={onRedo}
         disabled={!canRedo}
-        className="p-2 bg-gray-300 text-white rounded-xl hover:bg-gray-400 disabled:bg-gray-100 disabled:cursor-not-allowed transition-colors"
+        className="p-2 bg-pink-300 text-white rounded-xl hover:bg-pink-400 disabled:bg-gray-100 disabled:cursor-not-allowed transition-colors"
         title="Redo last undone action"
         aria-label="Redo"
       >

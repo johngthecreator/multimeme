@@ -1,5 +1,6 @@
 import { useEffect, useCallback } from "react";
 import type { CanvasElementData } from "../types/canvas";
+import type { CropRect } from "../components/Canvas/CanvasElement";
 import { db } from "../db";
 import { useBackgroundRemoval } from "./useBackgroundRemoval";
 
@@ -57,18 +58,18 @@ export function useCanvasElements({
   };
 
   // Clear all elements
-  const handleClearAll = () => {
-    if (elements.length === 0) {
-      updateStatus("Canvas is already empty", "info");
-      return;
-    }
+  // const handleClearAll = () => {
+  //   if (elements.length === 0) {
+  //     updateStatus("Canvas is already empty", "info");
+  //     return;
+  //   }
 
-    if (window.confirm("Are you sure you want to clear all elements?")) {
-      updateElementsWithHistory([]);
-      setSelectedElementIds(new Set());
-      updateStatus("Canvas cleared", "success");
-    }
-  };
+  //   if (window.confirm("Are you sure you want to clear all elements?")) {
+  //     updateElementsWithHistory([]);
+  //     setSelectedElementIds(new Set());
+  //     updateStatus("Canvas cleared", "success");
+  //   }
+  // };
 
   // Handle element content change
   const handleElementContentChange = (id: string, content: string) => {
@@ -113,9 +114,7 @@ export function useCanvasElements({
         return {
           ...el,
           fontFamily:
-            current === "sans"
-              ? ("comic-sans" as const)
-              : ("sans" as const),
+            current === "sans" ? ("comic-sans" as const) : ("sans" as const),
         };
       }
       return el;
@@ -179,6 +178,8 @@ export function useCanvasElements({
           height: Math.min(img.naturalHeight, 300),
           rotation: 0,
           src: objectUrl,
+          naturalWidth: img.naturalWidth,
+          naturalHeight: img.naturalHeight,
         };
 
         const newElements = [...elements, newElement];
@@ -276,6 +277,30 @@ export function useCanvasElements({
     }
   };
 
+  // Handle crop commit
+  const handleCropImage = (
+    id: string,
+    crop: CropRect,
+    newWidth: number,
+    newHeight: number,
+    naturalWidth: number,
+    naturalHeight: number,
+  ) => {
+    const newElements = elements.map((el) =>
+      el.id === id
+        ? {
+            ...el,
+            crop,
+            width: newWidth,
+            height: newHeight,
+            naturalWidth,
+            naturalHeight,
+          }
+        : el,
+    );
+    updateElementsWithHistory(newElements);
+  };
+
   // Cleanup unreferenced images
   const handleCleanupUnreferencedImages = useCallback(async () => {
     const referencedIds = new Set<string>();
@@ -329,7 +354,7 @@ export function useCanvasElements({
 
   return {
     handleAddTextbox,
-    handleClearAll,
+    // handleClearAll,
     handleElementContentChange,
     handleElementFocus,
     handleElementBlur,
@@ -341,6 +366,7 @@ export function useCanvasElements({
     handleMeasure,
     handleCleanupUnreferencedImages,
     handleRemoveBackground,
+    handleCropImage,
     bgRemovalProcessingIds,
   };
 }
