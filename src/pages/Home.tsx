@@ -1,6 +1,7 @@
 import { useState, useRef } from "react";
 import Toolbar from "../components/Toolbar/Toolbar";
 import Canvas from "../components/Canvas/Canvas";
+import ZoomControls from "../components/Canvas/ZoomControls";
 import Settings from "../components/Settings/Settings";
 import { useDexieElements } from "../hooks/useDexieElements";
 import { useCanvasHistory } from "../hooks/useCanvasHistory";
@@ -16,6 +17,7 @@ export type { MarqueeState } from "../types/canvas";
 export default function Home() {
   const canvasRef = useRef<HTMLDivElement>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [zoom, setZoom] = useState(1);
   const [, setStatusState] = useState<StatusState>({
     message: "Ready",
     type: "info",
@@ -117,6 +119,22 @@ export default function Home() {
   // Auto-save to IndexedDB
   useCanvasAutoSave({ elements, saveElements });
 
+  const handleZoom = (delta: number) => {
+    const canvas = canvasRef.current;
+    const newZoom = Math.min(3, Math.max(0.25, Math.round((zoom + delta) * 100) / 100));
+    if (!canvas || newZoom === zoom) return;
+
+    const centerX = canvas.scrollLeft + canvas.clientWidth / 2;
+    const centerY = canvas.scrollTop + canvas.clientHeight / 2;
+
+    setZoom(newZoom);
+
+    requestAnimationFrame(() => {
+      canvas.scrollLeft = (centerX * newZoom / zoom) - canvas.clientWidth / 2;
+      canvas.scrollTop = (centerY * newZoom / zoom) - canvas.clientHeight / 2;
+    });
+  };
+
   return (
     <>
       <Toolbar
@@ -159,9 +177,16 @@ export default function Home() {
         bgRemovalProcessingIds={bgRemovalProcessingIds}
         isDragging={isDragging}
         marqueeState={marqueeState}
+        zoom={zoom}
         onSetShapeFillColor={handleSetShapeFillColor}
         onStartShapeEyedropper={handleStartShapeEyedropper}
         eyedropperTargetId={eyedropperTargetId}
+      />
+
+      <ZoomControls
+        zoom={zoom}
+        onZoomIn={() => handleZoom(0.25)}
+        onZoomOut={() => handleZoom(-0.25)}
       />
     </>
   );

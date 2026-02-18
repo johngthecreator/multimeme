@@ -28,6 +28,7 @@ interface CanvasProps {
   bgRemovalProcessingIds?: Set<string>;
   isDragging?: boolean;
   marqueeState?: MarqueeState | null;
+  zoom?: number;
   onSetShapeFillColor?: (id: string, color: string) => void;
   onStartShapeEyedropper?: (id: string) => void;
   eyedropperTargetId?: string | null;
@@ -55,6 +56,7 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(function Canvas(
     bgRemovalProcessingIds,
     isDragging = false,
     marqueeState,
+    zoom = 1,
     onSetShapeFillColor,
     onStartShapeEyedropper,
     eyedropperTargetId,
@@ -93,7 +95,7 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(function Canvas(
       <div className="absolute inset-0 opacity-5 pointer-events-none" />
 
       {/* Render all canvas elements - infinite canvas size */}
-      <div className="relative" style={{ width: "10000px", height: "10000px" }}>
+      <div className="relative" style={{ width: "10000px", height: "10000px", zoom }}>
         {elements.map((element) => (
           <CanvasElement
             key={element.id}
