@@ -5,9 +5,10 @@ import {
   env,
 } from "@huggingface/transformers";
 
-// Only use remote models — proxy through our own origin to avoid CORS issues
-env.allowLocalModels = false;
-env.remoteHost = `${self.location.origin}/hf-proxy`;
+// Use local models from public directory
+env.allowLocalModels = true;
+env.allowRemoteModels = false;
+env.localModelPath = "/models/";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let model: any = null;
@@ -19,9 +20,9 @@ async function ensureModel() {
 
   postMessage({ type: "progress", status: "loading" });
 
-  processor = await AutoProcessor.from_pretrained("Xenova/modnet");
-  model = await AutoModel.from_pretrained("Xenova/modnet", {
-    dtype: "fp32",
+  processor = await AutoProcessor.from_pretrained("/models/modnet");
+  model = await AutoModel.from_pretrained("/models/modnet", {
+    dtype: "uint8", // Use quantized model (int8)
   });
 
   postMessage({ type: "progress", status: "ready" });
