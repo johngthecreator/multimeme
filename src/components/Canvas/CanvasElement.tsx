@@ -1,5 +1,6 @@
 import Textbox from './Textbox';
 import Image from './Image';
+import Shape from './Shape';
 
 export interface CropRect {
   x: number;
@@ -10,7 +11,7 @@ export interface CropRect {
 
 export interface CanvasElementData {
   id: string;
-  type: 'textbox' | 'image';
+  type: 'textbox' | 'image' | 'shape';
   x: number;
   y: number;
   width?: number;
@@ -25,6 +26,8 @@ export interface CanvasElementData {
   naturalWidth?: number;
   naturalHeight?: number;
   crop?: CropRect;
+  shape?: 'rectangle' | 'square' | 'circle' | 'triangle';
+  fillColor?: string;
 }
 
 interface CanvasElementProps extends CanvasElementData {
@@ -44,6 +47,9 @@ interface CanvasElementProps extends CanvasElementData {
   onCropCommit?: (id: string, crop: import('./CanvasElement').CropRect, newWidth: number, newHeight: number, naturalWidth: number, naturalHeight: number) => void;
   isRemovingBackground?: boolean;
   isDragging?: boolean;
+  onSetShapeFillColor?: (id: string, color: string) => void;
+  onStartShapeEyedropper?: (id: string) => void;
+  eyedropperTargetId?: string | null;
 }
 
 export default function CanvasElement({
@@ -79,6 +85,11 @@ export default function CanvasElement({
   naturalWidth,
   naturalHeight,
   crop,
+  shape = 'rectangle',
+  fillColor,
+  onSetShapeFillColor,
+  onStartShapeEyedropper,
+  eyedropperTargetId,
 }: CanvasElementProps) {
   if (type === 'textbox') {
     return (
@@ -132,6 +143,29 @@ export default function CanvasElement({
         naturalWidth={naturalWidth}
         naturalHeight={naturalHeight}
         crop={crop}
+      />
+    );
+  }
+
+  if (type === 'shape') {
+    return (
+      <Shape
+        id={id}
+        shape={shape}
+        fillColor={fillColor}
+        x={x}
+        y={y}
+        width={width}
+        height={height}
+        rotation={rotation}
+        isSelected={isSelected}
+        onMouseDown={onMouseDown}
+        onRotate={onRotate}
+        onRotateHandleMouseDown={onRotateHandleMouseDown}
+        onSetFillColor={onSetShapeFillColor}
+        onStartEyedropper={onStartShapeEyedropper}
+        isEyedropperActive={eyedropperTargetId === id}
+        isDragging={isDragging}
       />
     );
   }

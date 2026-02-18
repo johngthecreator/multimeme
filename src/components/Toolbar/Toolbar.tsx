@@ -1,11 +1,14 @@
 import { Settings as SettingsIcon } from "lucide-react";
 import AddTextboxButton from "./AddTextboxButton";
+import AddShapeButton from "./AddShapeButton";
 // import ClearButton from "./ClearButton";
 import UndoRedoButtons from "./UndoRedoButtons";
 import gloopLogo from "../../assets/gloop.svg";
+import type { ShapeKind } from "../Canvas/Shape";
 
 interface ToolbarProps {
   onAddTextbox: () => void;
+  onAddShape: (shape: ShapeKind) => void;
   // onClearAll: () => void;
   onUndo: () => void;
   onRedo: () => void;
@@ -16,6 +19,7 @@ interface ToolbarProps {
 
 export default function Toolbar({
   onAddTextbox,
+  onAddShape,
   // onClearAll,
   onUndo,
   onRedo,
@@ -42,6 +46,7 @@ export default function Toolbar({
           canRedo={canRedo}
         />
         <AddTextboxButton onClick={onAddTextbox} />
+        <AddShapeButton onAddShape={onAddShape} />
         {/* <ClearButton onClick={onClearAll} /> */}
         <button
           onClick={onOpenSettings}

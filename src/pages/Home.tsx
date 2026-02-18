@@ -68,6 +68,7 @@ export default function Home() {
   // Element CRUD + property toggles + paste
   const {
     handleAddTextbox,
+    handleAddShape,
     // handleClearAll,
     handleElementContentChange,
     handleElementFocus,
@@ -82,6 +83,9 @@ export default function Home() {
     handleRemoveBackground,
     handleCropImage,
     bgRemovalProcessingIds,
+    handleSetShapeFillColor,
+    handleStartShapeEyedropper,
+    eyedropperTargetId,
   } = useCanvasElements({
     elements,
     setElements,
@@ -117,6 +121,7 @@ export default function Home() {
     <>
       <Toolbar
         onAddTextbox={handleAddTextbox}
+        onAddShape={handleAddShape}
         // onClearAll={handleClearAll}
         onUndo={handleUndo}
         onRedo={handleRedo}
@@ -154,6 +159,9 @@ export default function Home() {
         bgRemovalProcessingIds={bgRemovalProcessingIds}
         isDragging={isDragging}
         marqueeState={marqueeState}
+        onSetShapeFillColor={handleSetShapeFillColor}
+        onStartShapeEyedropper={handleStartShapeEyedropper}
+        eyedropperTargetId={eyedropperTargetId}
       />
     </>
   );

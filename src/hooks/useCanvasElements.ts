@@ -1,5 +1,6 @@
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useRef, useState } from "react";
 import type { CanvasElementData } from "../types/canvas";
+import type { ShapeKind } from "../components/Canvas/Shape";
 import type { CropRect } from "../components/Canvas/CanvasElement";
 import { db } from "../db";
 import { useBackgroundRemoval } from "./useBackgroundRemoval";
@@ -30,6 +31,31 @@ export function useCanvasElements({
   cursorPosition,
   updateStatus,
 }: UseCanvasElementsParams) {
+  const [eyedropperTargetId, setEyedropperTargetId] = useState<string | null>(
+    null,
+  );
+  const lastPreviewColorRef = useRef<string | null>(null);
+  const eyedropperCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const eyedropperStartColorRef = useRef<string | null>(null);
+
+  const previewShapeFillColor = useCallback(
+    (id: string, color: string) => {
+      setElements((prev) =>
+        prev.map((el) => (el.id === id ? { ...el, fillColor: color } : el)),
+      );
+    },
+    [setElements],
+  );
+
+  const commitShapeFillColor = useCallback(
+    (id: string, color: string) => {
+      const newElements = elements.map((el) =>
+        el.id === id ? { ...el, fillColor: color } : el,
+      );
+      updateElementsWithHistory(newElements);
+    },
+    [elements, updateElementsWithHistory],
+  );
   // Add a new textbox
   const handleAddTextbox = () => {
     const newId = `textbox-${Date.now()}`;
@@ -56,6 +82,183 @@ export function useCanvasElements({
     setSelectedElementIds(new Set([newId]));
     updateStatus("Textbox added", "success");
   };
+
+  const handleAddShape = (shape: ShapeKind) => {
+    const newId = `shape-${Date.now()}`;
+
+    const canvas = canvasRef.current;
+    const x = canvas
+      ? canvas.scrollLeft + canvas.clientWidth / 2
+      : 5000 + elements.length * 10;
+    const y = canvas
+      ? canvas.scrollTop + canvas.clientHeight / 2
+      : 5000 + elements.length * 10;
+
+    let width = 200;
+    let height = 140;
+    let fillColor = "#FDE68A";
+
+    if (shape === "square") {
+      width = 160;
+      height = 160;
+      fillColor = "#C7D2FE";
+    } else if (shape === "circle") {
+      width = 160;
+      height = 160;
+      fillColor = "#A7F3D0";
+    } else if (shape === "triangle") {
+      width = 200;
+      height = 180;
+      fillColor = "#FBCFE8";
+    }
+
+    const newElement: CanvasElementData = {
+      id: newId,
+      type: "shape",
+      shape,
+      x,
+      y,
+      width,
+      height,
+      rotation: 0,
+      fillColor,
+    };
+
+    updateElementsWithHistory([...elements, newElement]);
+    setSelectedElementIds(new Set([newId]));
+    updateStatus("Shape added", "success");
+  };
+
+  const handleSetShapeFillColor = (id: string, color: string) => {
+    commitShapeFillColor(id, color);
+    updateStatus("Shape color updated", "success");
+  };
+
+  const handleStartShapeEyedropper = (id: string) => {
+    if (eyedropperTargetId === id) {
+      setEyedropperTargetId(null);
+      lastPreviewColorRef.current = null;
+      if (eyedropperStartColorRef.current) {
+        previewShapeFillColor(id, eyedropperStartColorRef.current);
+      }
+      eyedropperStartColorRef.current = null;
+      updateStatus("Eyedropper canceled", "info");
+      return;
+    }
+    lastPreviewColorRef.current = null;
+    const target = elements.find((el) => el.id === id);
+    eyedropperStartColorRef.current = target?.fillColor || null;
+    setEyedropperTargetId(id);
+    updateStatus("Eyedropper active - hover an image to pick a color", "info");
+  };
+
+  useEffect(() => {
+    if (!eyedropperTargetId) return;
+
+    const canvas =
+      eyedropperCanvasRef.current || document.createElement("canvas");
+    eyedropperCanvasRef.current = canvas;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return;
+
+    const pickColorAtPoint = (clientX: number, clientY: number) => {
+      const el = document.elementFromPoint(clientX, clientY) as
+        | HTMLElement
+        | null;
+      if (!el) return null;
+
+      const imageRoot = el.closest(
+        '[data-element-type="image"]',
+      ) as HTMLElement | null;
+      if (!imageRoot) return null;
+
+      const img = imageRoot.querySelector("img") as HTMLImageElement | null;
+      if (!img || !img.naturalWidth || !img.naturalHeight) return null;
+
+      const rect = img.getBoundingClientRect();
+      const x = clientX - rect.left;
+      const y = clientY - rect.top;
+      if (x < 0 || y < 0 || x > rect.width || y > rect.height) return null;
+
+      const drawW = Math.max(1, Math.floor(rect.width));
+      const drawH = Math.max(1, Math.floor(rect.height));
+      canvas.width = drawW;
+      canvas.height = drawH;
+
+      try {
+        ctx.drawImage(img, 0, 0, drawW, drawH);
+        const px = Math.min(drawW - 1, Math.max(0, Math.floor(x)));
+        const py = Math.min(drawH - 1, Math.max(0, Math.floor(y)));
+        const data = ctx.getImageData(px, py, 1, 1).data;
+        const [r, g, b] = data;
+        return `#${[r, g, b]
+          .map((v) => v.toString(16).padStart(2, "0"))
+          .join("")}`;
+      } catch {
+        return null;
+      }
+    };
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const color = pickColorAtPoint(e.clientX, e.clientY);
+      if (!color || color === lastPreviewColorRef.current) return;
+      lastPreviewColorRef.current = color;
+      previewShapeFillColor(eyedropperTargetId, color);
+    };
+
+    const handleMouseDown = (e: MouseEvent) => {
+      const color = pickColorAtPoint(e.clientX, e.clientY);
+      if (!color) return;
+      e.preventDefault();
+      e.stopPropagation();
+    };
+
+    const handleClick = (e: MouseEvent) => {
+      const color = pickColorAtPoint(e.clientX, e.clientY);
+      if (!color) return;
+      e.preventDefault();
+      e.stopPropagation();
+      commitShapeFillColor(eyedropperTargetId, color);
+      updateStatus("Color picked", "success");
+      setEyedropperTargetId(null);
+      lastPreviewColorRef.current = null;
+      eyedropperStartColorRef.current = null;
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (eyedropperStartColorRef.current && eyedropperTargetId) {
+          previewShapeFillColor(
+            eyedropperTargetId,
+            eyedropperStartColorRef.current,
+          );
+        }
+        setEyedropperTargetId(null);
+        lastPreviewColorRef.current = null;
+        eyedropperStartColorRef.current = null;
+        updateStatus("Eyedropper canceled", "info");
+      }
+    };
+
+    document.body.style.cursor = "crosshair";
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mousedown", handleMouseDown, true);
+    window.addEventListener("click", handleClick, true);
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.body.style.cursor = "";
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mousedown", handleMouseDown, true);
+      window.removeEventListener("click", handleClick, true);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [
+    eyedropperTargetId,
+    commitShapeFillColor,
+    previewShapeFillColor,
+    updateStatus,
+  ]);
 
   // Clear all elements
   // const handleClearAll = () => {
@@ -354,6 +557,7 @@ export function useCanvasElements({
 
   return {
     handleAddTextbox,
+    handleAddShape,
     // handleClearAll,
     handleElementContentChange,
     handleElementFocus,
@@ -368,5 +572,8 @@ export function useCanvasElements({
     handleRemoveBackground,
     handleCropImage,
     bgRemovalProcessingIds,
+    handleSetShapeFillColor,
+    handleStartShapeEyedropper,
+    eyedropperTargetId,
   };
 }

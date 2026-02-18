@@ -215,6 +215,7 @@ export function useCanvasInteractions({
     };
   };
 
+
   // Disable text selection while actively dragging or marquee-selecting
   useEffect(() => {
     if (isDragging || marqueeState) {
@@ -253,7 +254,7 @@ export function useCanvasInteractions({
           `[data-element-id="${rs.elementId}"]`,
         ) as HTMLElement;
 
-        if (element.type === "image") {
+        if (element.type === "image" || element.type === "shape") {
           const newWidth = Math.max(
             50,
             (rs.elementStartWidth || 200) * scaleFactor,

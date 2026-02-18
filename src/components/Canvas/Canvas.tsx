@@ -28,6 +28,9 @@ interface CanvasProps {
   bgRemovalProcessingIds?: Set<string>;
   isDragging?: boolean;
   marqueeState?: MarqueeState | null;
+  onSetShapeFillColor?: (id: string, color: string) => void;
+  onStartShapeEyedropper?: (id: string) => void;
+  eyedropperTargetId?: string | null;
 }
 
 const Canvas = forwardRef<HTMLDivElement, CanvasProps>(function Canvas(
@@ -52,6 +55,9 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(function Canvas(
     bgRemovalProcessingIds,
     isDragging = false,
     marqueeState,
+    onSetShapeFillColor,
+    onStartShapeEyedropper,
+    eyedropperTargetId,
   },
   ref,
 ) {
@@ -108,6 +114,9 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(function Canvas(
             onCropCommit={onCropImage}
             isRemovingBackground={bgRemovalProcessingIds?.has(element.id)}
             isDragging={isDragging}
+            onSetShapeFillColor={onSetShapeFillColor}
+            onStartShapeEyedropper={onStartShapeEyedropper}
+            eyedropperTargetId={eyedropperTargetId}
           />
         ))}
 
@@ -137,7 +146,9 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(function Canvas(
         >
           <div className="text-center text-gray-400">
             <p className="text-lg font-semibold">Canvas is empty</p>
-            <p className="text-sm">Click "Add Textbox" to get started</p>
+            <p className="text-sm">
+              Click "Add Textbox" or "Add Shape" to get started
+            </p>
           </div>
         </div>
       )}
